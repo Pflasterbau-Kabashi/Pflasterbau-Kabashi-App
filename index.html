@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Pflasterbau Kabashi</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f4f6f5;margin:0;color:#17201b}
+main{max-width:620px;margin:auto;padding:22px} .card{background:white;padding:20px;border-radius:18px;margin:14px 0;box-shadow:0 2px 12px #0001}
+h1{font-size:27px} h2{font-size:20px} input,select,textarea,button{box-sizing:border-box;width:100%;padding:14px;margin:6px 0;border-radius:12px;border:1px solid #ccd3cf;font-size:16px}
+button{background:#16834f;color:white;border:0;font-weight:700} button.secondary{background:#e9eeeb;color:#17201b} button.danger{background:#b82d2d}
+.hidden{display:none} .status{font-weight:700;margin:10px 0} .timer{font-size:36px;font-weight:800;text-align:center;margin:15px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px} small{color:#65706a}
+</style>
+</head>
+<body><main>
+<h1>🧱 Pflasterbau Kabashi</h1>
+<div id="login" class="card">
+<h2>Anmelden</h2><input id="email" type="email" placeholder="E-Mail">
+<input id="password" type="password" placeholder="Passwort">
+<button onclick="login()">Anmelden</button><div id="loginmsg"></div>
+</div>
+<div id="app" class="hidden">
+<div class="card"><b id="welcome"></b><button class="secondary" onclick="logout()">Abmelden</button></div>
+<div class="card"><h2>Baustelle</h2><select id="project"></select><div class="timer" id="timer">00:00:00</div>
+<div class="grid"><button id="startBtn" onclick="startWork()">START</button><button id="pauseBtn" class="secondary" onclick="togglePause()">PAUSE</button></div>
+<button class="danger" onclick="finishWork()">ARBEIT BEENDEN</button><div id="workmsg"></div></div>
+<div class="card"><h2>📷 Baustellenfoto</h2><input id="photo" type="file" accept="image/*" capture="environment"><input id="caption" placeholder="Beschreibung"><button onclick="uploadPhoto()">Foto speichern</button><div id="photomsg"></div></div>
+<div class="card"><h2>🧱 Material</h2><input id="material" placeholder="Material"><div class="grid"><input id="qty" type="number" step="0.01" placeholder="Menge"><input id="unit" placeholder="Einheit, z.B. kg"></div><input id="note" placeholder="Notiz"><button onclick="saveMaterial()">Material speichern</button><div id="matmsg"></div></div>
+<div class="card"><h2>📝 Tagesbericht</h2><textarea id="report" rows="5" placeholder="Heute ausgeführte Arbeiten"></textarea><input id="customer" placeholder="Kundenname"><button onclick="saveReport()">Tagesbericht speichern</button><div id="reportmsg"></div></div>
+<div id="chef" class="card hidden"><h2>👷 Chefbereich</h2><input id="pname" placeholder="Neue Baustelle"><input id="paddress" placeholder="Adresse"><textarea id="pdesc" placeholder="Beschreibung"></textarea><button onclick="createProject()">Baustelle anlegen</button><div id="chefmsg"></div></div>
+</div>
+</main>
+<script>
+const sb=supabase.createClient("https://qloxzpatogwqnmcpdpps.supabase.co","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsb3h6cGF0b3F3cW5tY3BkcHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2MjMwMzYsImV4cCI6MjEwNjE5OTAzNn0.egK--S-CpRE3wP7r-T5aGP9njjU9zdPHcWatRu7ySuE");
+let user=null, profile=null, sessionId=null, started=null, pausedAt=null, pauseSeconds=0, ticker=null;
+const $=id=>document.getElementById(id); const msg=(id,t)=>$(id).textContent=t;
+async function login(){let r=await sb.auth.signInWithPassword({email:$("email").value.trim(),password:$("password").value});if(r.error)return msg("loginmsg","❌ "+r.error.message);await boot(r.data.user)}
+async function logout(){await sb.auth.signOut();location.reload()}
+async function boot(u){user=u;let r=await sb.from("profiles").select("*").eq("id",u.id).single();if(r.error)return msg("loginmsg","❌ Profil konnte nicht geladen werden.");profile=r.data;$("login").classList.add("hidden");$("app").classList.remove("hidden");$("welcome").textContent="Hallo "+profile.full_name+(profile.role==="chef"?" – Chef":"");if(profile.role==="chef")$("chef").classList.remove("hidden");await loadProjects();await restoreSession()}
+async function loadProjects(){let r=await sb.from("projects").select("id,name,address").eq("active",true).order("name");$("project").innerHTML=(r.data||[]).map(p=>`<option value="${p.id}">${p.name}${p.address?" – "+p.address:""}</option>`).join("")||"<option>Keine Baustelle zugewiesen</option>"}
+async function startWork(){if(!$("project").value)return;let now=new Date().toISOString();let r=await sb.from("work_sessions").insert({user_id:user.id,project_id:$("project").value,started_at:now,pause_seconds:0}).select().single();if(r.error)return msg("workmsg","❌ "+r.error.message);sessionId=r.data.id;started=new Date(r.data.started_at);pauseSeconds=0;pausedAt=null;tick();ticker=setInterval(tick,1000);msg("workmsg","✅ Arbeitszeit läuft")}
+function tick(){if(!started)return;let end=pausedAt?pausedAt:new Date();let s=Math.max(0,Math.floor((end-started)/1000)-pauseSeconds);$("timer").textContent=[Math.floor(s/3600),Math.floor(s%3600/60),s%60].map(x=>String(x).padStart(2,"0")).join(":")}
+async function togglePause(){if(!sessionId)return msg("workmsg","Bitte zuerst START drücken.");if(!pausedAt){pausedAt=new Date();$("pauseBtn").textContent="WEITER";msg("workmsg","⏸ Pause")}else{pauseSeconds+=Math.floor((new Date()-pausedAt)/1000);pausedAt=null;$("pauseBtn").textContent="PAUSE";await sb.from("work_sessions").update({pause_seconds:pauseSeconds}).eq("id",sessionId);msg("workmsg","▶️ Arbeit läuft weiter")}}
+async function finishWork(){if(!sessionId)return; if(pausedAt)pauseSeconds+=Math.floor((new Date()-pausedAt)/1000);let r=await sb.from("work_sessions").update({ended_at:new Date().toISOString(),pause_seconds:pauseSeconds}).eq("id",sessionId);if(r.error)return msg("workmsg","❌ "+r.error.message);clearInterval(ticker);sessionId=null;started=null;pausedAt=null;$("pauseBtn").textContent="PAUSE";msg("workmsg","✅ Arbeitszeit gespeichert")}
+async function restoreSession(){let r=await sb.from("work_sessions").select("*").eq("user_id",user.id).is("ended_at",null).order("started_at",{ascending:false}).limit(1);if(r.data?.length){let s=r.data[0];sessionId=s.id;started=new Date(s.started_at);pauseSeconds=s.pause_seconds||0;$("project").value=s.project_id;tick();ticker=setInterval(tick,1000)}}
+async function uploadPhoto(){let f=$("photo").files[0];if(!f)return msg("photomsg","Bitte Foto auswählen.");let path=`${user.id}/${Date.now()}-${f.name.replace(/[^a-zA-Z0-9._-]/g,"_")}`;let up=await sb.storage.from("project-files").upload(path,f);if(up.error)return msg("photomsg","❌ "+up.error.message);let r=await sb.from("project_photos").insert({project_id:$("project").value,user_id:user.id,storage_path:path,caption:$("caption").value});msg("photomsg",r.error?"❌ "+r.error.message:"✅ Foto gespeichert")}
+async function saveMaterial(){let r=await sb.from("materials").insert({project_id:$("project").value,user_id:user.id,material:$("material").value,quantity:Number($("qty").value),unit:$("unit").value,note:$("note").value});msg("matmsg",r.error?"❌ "+r.error.message:"✅ Material gespeichert")}
+async function saveReport(){let r=await sb.from("daily_reports").insert({project_id:$("project").value,user_id:user.id,report_text:$("report").value,customer_name:$("customer").value});msg("reportmsg",r.error?"❌ "+r.error.message:"✅ Tagesbericht gespeichert")}
+async function createProject(){let r=await sb.from("projects").insert({name:$("pname").value,address:$("paddress").value,description:$("pdesc").value,active:true});msg("chefmsg",r.error?"❌ "+r.error.message:"✅ Baustelle angelegt");if(!r.error)loadProjects()}
+sb.auth.getSession().then(x=>{if(x.data.session)boot(x.data.session.user)})
+</script></body></html>
