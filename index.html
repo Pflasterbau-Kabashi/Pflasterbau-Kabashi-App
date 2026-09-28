@@ -32,7 +32,7 @@ button{background:#16834f;color:white;border:0;font-weight:700} button.secondary
 </div>
 </main>
 <script>
-const sb=supabase.createClient("https://qloxzpatogwqnmcpdpps.supabase.co","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsb3h6cGF0b3F3cW5tY3BkcHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2MjMwMzYsImV4cCI6MjEwNjE5OTAzNn0.egK--S-CpRE3wP7r-T5aGP9njjU9zdPHcWatRu7ySuE");
+const sb=supabase.createClient("https://qloxzpatoqwqnmcpdpps.supabase.co","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsb3h6cGF0b3F3cW5tY3BkcHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2MjMwMzYsImV4cCI6MjEwNjE5OTAzNn0.egK--S-CpRE3wP7r-T5aGP9njjU9zdPHcWatRu7ySuE");
 let user=null, profile=null, sessionId=null, started=null, pausedAt=null, pauseSeconds=0, ticker=null;
 const $=id=>document.getElementById(id); const msg=(id,t)=>$(id).textContent=t;
 async function login(){let r=await sb.auth.signInWithPassword({email:$("email").value.trim(),password:$("password").value});if(r.error)return msg("loginmsg","❌ "+r.error.message);await boot(r.data.user)}
