@@ -73,4 +73,71 @@ async function chefFinish(){let id=$("editId").value,r=await sb.from("work_sessi
 async function loadAudit(){if(profile?.role!=="chef")return;let [au,ws,pr]=await Promise.all([sb.from("work_session_audit").select("*").order("changed_at",{ascending:false}).limit(300),sb.from("work_sessions").select("id,user_id"),sb.from("profiles").select("id,full_name")]);if(au.error)return $("auditResult").innerHTML="❌ "+esc(au.error.message);let smap=Object.fromEntries((ws.data||[]).map(x=>[x.id,x.user_id])),pmap=Object.fromEntries((pr.data||[]).map(x=>[x.id,x.full_name])),emp=$("auditEmployee").value,from=$("auditFrom").value?new Date($("auditFrom").value+"T00:00:00"):null,to=$("auditTo").value?new Date($("auditTo").value+"T23:59:59"):null;let data=(au.data||[]).filter(a=>{let d=new Date(a.changed_at),uid=smap[a.work_session_id];return(!emp||uid===emp)&&(!from||d>=from)&&(!to||d<=to)});$("auditResult").innerHTML=data.map(a=>{let uid=smap[a.work_session_id],changes=[];if(a.old_started_at!==a.new_started_at)changes.push(`Start: ${fmtDate(a.old_started_at)} → ${fmtDate(a.new_started_at)}`);if(a.old_ended_at!==a.new_ended_at)changes.push(`Ende: ${fmtDate(a.old_ended_at)} → ${fmtDate(a.new_ended_at)}`);if(a.old_pause_seconds!==a.new_pause_seconds)changes.push(`Pause: ${Math.floor((a.old_pause_seconds||0)/60)} → ${Math.floor((a.new_pause_seconds||0)/60)} Min`);if(a.old_paused_at!==a.new_paused_at)changes.push(`Pausenstatus: ${a.old_paused_at?"Pause":"Arbeit"} → ${a.new_paused_at?"Pause":"Arbeit"}`);return `<div class="item"><b>${esc(pmap[uid]||"Mitarbeiter")}</b><br><small>${fmtDate(a.changed_at)} · geändert von ${esc(pmap[a.changed_by]||"System")}</small><br>${changes.map(esc).join("<br>")}</div>`}).join("")||"Keine Änderungen im gewählten Zeitraum."}
 async function loadSiteReport(){let pid=$("reportProject").value;if(!pid)return;let pName=$("reportProject").selectedOptions[0]?.textContent||"Baustelle";$("siteReport").innerHTML="Wird geladen…";let [ws,ma,ph,dr,pr]=await Promise.all([sb.from("work_sessions").select("user_id,started_at,ended_at,pause_seconds,paused_at").eq("project_id",pid).order("started_at"),sb.from("materials").select("user_id,material,quantity,unit,note,created_at").eq("project_id",pid).order("created_at"),sb.from("project_photos").select("user_id,storage_path,caption,created_at").eq("project_id",pid).order("created_at"),sb.from("daily_reports").select("user_id,report_date,report_text,customer_name,created_at").eq("project_id",pid).order("report_date"),sb.from("profiles").select("id,full_name")]);for(let r of [ws,ma,ph,dr,pr])if(r.error)return $("siteReport").innerHTML="❌ "+esc(r.error.message);let umap=Object.fromEntries((pr.data||[]).map(x=>[x.id,x.full_name])),tot={};let wh=(ws.data||[]).map(x=>{let s=workedSeconds(x);if(s!==null)tot[x.user_id]=(tot[x.user_id]||0)+s;let shown=s===null?liveSeconds(x):s;return `<div class="item"><b>${esc(umap[x.user_id]||"Mitarbeiter")}</b><br><small>${fmtDate(x.started_at)} → ${fmtDate(x.ended_at)} · Pause ${Math.floor(currentPauseSeconds(x)/60)} Min${x.paused_at&&!x.ended_at?" ⏸":""}</small><br><b>${s===null?"aktuell: ":""}${fmtDuration(shown)}</b></div>`}).join("");let sums=Object.entries(tot).map(([u,s])=>`<div><b>${esc(umap[u]||"Mitarbeiter")}:</b> ${fmtDuration(s)}</div>`).join("");let mh=(ma.data||[]).map(x=>`<div class="item"><b>${esc(x.material)}</b> – ${esc(x.quantity)} ${esc(x.unit)} · ${esc(umap[x.user_id]||"Mitarbeiter")}${x.note?`<br><small>${esc(x.note)}</small>`:""}</div>`).join("");let rh=(dr.data||[]).map(x=>`<div class="item"><b>${esc(x.report_date||"")} · ${esc(umap[x.user_id]||"Mitarbeiter")}</b><br>${esc(x.report_text||"")}${x.customer_name?`<br><small>Kunde: ${esc(x.customer_name)}</small>`:""}</div>`).join("");let photos=[];for(let x of (ph.data||[])){let s=await sb.storage.from("project-files").createSignedUrl(x.storage_path,3600);if(!s.error)photos.push(`<div class="item"><b>${esc(umap[x.user_id]||"Mitarbeiter")}</b> · ${fmtDate(x.created_at)}<br>${x.caption?esc(x.caption)+"<br>":""}<img src="${s.data.signedUrl}" alt="Baustellenfoto"></div>`)}$("siteReport").innerHTML=`<h2>${esc(pName)}</h2><h3>Arbeitsstunden</h3>${sums||"Keine abgeschlossenen Stunden."}${wh}<h3>Material</h3>${mh||"Keine Materialien."}<h3>Tagesberichte</h3>${rh||"Keine Tagesberichte."}<h3>Fotos</h3><div class="photoGrid">${photos.join("")||"Keine Fotos."}</div>`}
 sb.auth.getSession().then(x=>{if(x.data.session)boot(x.data.session.user)})
+async function createEmployee(){
+
+  const full_name = prompt("Name des neuen Mitarbeiters:");
+
+  if(!full_name) return;
+
+  const email = prompt("E-Mail-Adresse des Mitarbeiters:");
+
+  if(!email) return;
+
+  const {data:{session}} = await sb.auth.getSession();
+
+  if(!session){
+
+    alert("Bitte neu anmelden.");
+
+    return;
+
+  }
+
+  const r = await fetch(
+
+    "https://qloxzpatoqwqnmcpdpps.supabase.co/functions/v1/create-employee",
+
+    {
+
+      method:"POST",
+
+      headers:{
+
+        "Content-Type":"application/json",
+
+        "Authorization":"Bearer "+session.access_token,
+
+        "apikey":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsb3h6cGF0b3F3cW5tY3BkcHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2MjMwMzYsImV4cCI6MjEwNjE5OTAzNn0.egK--S-CpRE3wP7r-T5aGP9njjU9zdPHcWatRu7ySuE"
+
+      },
+
+      body:JSON.stringify({
+
+        full_name,
+
+        email,
+
+        project_ids:[]
+
+      })
+
+    }
+
+  );
+
+  const result = await r.json();
+
+  if(!r.ok || !result.success){
+
+    alert("Fehler: "+(result.error || "Mitarbeiter konnte nicht angelegt werden."));
+
+    return;
+
+  }
+
+  alert("Mitarbeiter wurde angelegt und eingeladen.");
+
+  await loadChefData();
+
+}
 </script></body></html>
