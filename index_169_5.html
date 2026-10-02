@@ -1,0 +1,779 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Pflasterbau Kabashi</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{color-scheme:light}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f4f6f5;margin:0;color:#17201b}
+main{max-width:720px;margin:auto;padding:18px}.card{background:#fff;padding:18px;border-radius:18px;margin:14px 0;box-shadow:0 2px 12px #0001}
+h1{font-size:27px;margin:0}h2{font-size:20px;margin:4px 0 12px}h3{font-size:17px;margin:16px 0 8px}
+input,select,textarea,button{box-sizing:border-box;width:100%;padding:14px;margin:6px 0;border-radius:12px;border:1px solid #ccd3cf;font-size:16px}
+button{background:#16834f;color:#fff;border:0;font-weight:700}button.secondary{background:#e9eeeb;color:#17201b}button.danger{background:#b82d2d}.hidden{display:none!important}
+.timer{font-size:36px;font-weight:800;text-align:center;margin:15px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+small{color:#65706a}.item{padding:10px 0;border-bottom:1px solid #eee}.scroll{overflow-x:auto}table{width:100%;border-collapse:collapse;margin:10px 0}
+th,td{padding:8px;border-bottom:1px solid #ddd;text-align:left;font-size:13px;white-space:nowrap;vertical-align:top}.total{font-size:18px;font-weight:800;margin:12px 0;line-height:1.6}
+.photoGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.photoGrid img{width:100%;height:160px;object-fit:cover;border-radius:10px}
+.editbox{background:#f7f9f8;padding:12px;border-radius:12px;margin:10px 0}.brand{padding:8px 2px}.plus{color:#16834f}.minus{color:#b82d2d}.neutral{color:#65706a}
+.notice{background:#fff8d8;border:1px solid #f0d56b;padding:12px;border-radius:12px;margin:8px 0;font-weight:700}.ok{color:#16834f}.warn{color:#a45b00}
+hr{border:0;border-top:1px solid #eee;margin:18px 0}
+@media(max-width:430px){main{padding:12px}.grid,.grid3{grid-template-columns:1fr}.photoGrid{grid-template-columns:1fr}th,td{font-size:12px;padding:7px}}
+@media print{button,input,select,textarea{display:none!important}}
+</style>
+</head>
+<body><main>
+<div class="brand"><h1>🧱 Pflasterbau Kabashi</h1></div>
+
+<div id="login" class="card">
+  <h2>Anmelden</h2>
+  <input id="email" type="email" placeholder="E-Mail">
+  <input id="password" type="password" placeholder="Passwort">
+  <button onclick="login()">Anmelden</button>
+  <div id="loginmsg"></div>
+</div>
+
+<div id="app" class="hidden">
+  <div class="card"><b id="welcome"></b><button class="secondary" onclick="logout()">Abmelden</button></div>
+
+  <div id="reminderBanner" class="notice hidden"></div>
+
+  <div class="card">
+    <h2>⏱️ Arbeitszeit</h2>
+    <select id="project" onchange="projectChanged()"></select>
+    <div class="timer" id="timer">00:00:00</div>
+    <div class="grid">
+      <button id="startBtn" onclick="startWork()">START</button>
+      <button id="pauseBtn" class="secondary" onclick="togglePause()">PAUSE</button>
+    </div>
+    <button class="danger" onclick="finishWork()">ARBEIT BEENDEN</button>
+    <button class="secondary" onclick="openForgotStart()">⏰ START VERGESSEN</button>
+    <div id="workmsg"></div>
+
+    <div id="forgotBox" class="editbox hidden">
+      <h3>⏰ Startzeit nachtragen</h3>
+      <label>Tatsächlicher Arbeitsbeginn</label>
+      <input id="forgotStart" type="datetime-local">
+      <label>Notiz / Grund (optional)</label>
+      <input id="forgotNote" placeholder="z. B. Start am Handy vergessen">
+      <div class="grid">
+        <button onclick="saveForgotStart()">Start nachtragen & weiterlaufen</button>
+        <button class="secondary" onclick="closeForgotStart()">Abbrechen</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>📌 Krank / Urlaub</h2>
+    <input id="dayNote" placeholder="Notiz (optional)">
+    <div class="grid">
+      <button class="secondary" onclick="saveDayStatus('krank')">🤒 KRANK</button>
+      <button class="secondary" onclick="saveDayStatus('urlaub')">🏖️ URLAUB</button>
+    </div>
+    <small>Krank zählt Mo–Do 8 Std. und Freitag 7 Std. Urlaub zählt 0 Std. und verursacht kein Plus/Minus.</small>
+    <div id="statusmsg"></div>
+  </div>
+
+  <div class="card">
+    <h2>🔔 Erinnerungen</h2>
+    <button onclick="enableReminders()">GPS- & 08:30-Erinnerung aktivieren</button>
+    <small>GPS erinnert nur, wenn du bei einer eingetragenen Baustelle bist. Die Arbeitszeit startet niemals automatisch. Die 08:30-Erinnerung funktioniert zuverlässig, solange die App geöffnet ist.</small>
+    <div id="remindermsg"></div>
+  </div>
+
+  <div class="card">
+    <h2>📷 Baustellenfoto</h2>
+    <input id="photo" type="file" accept="image/*" capture="environment">
+    <input id="caption" placeholder="Beschreibung">
+    <button onclick="uploadPhoto()">Foto speichern</button>
+    <div id="photomsg"></div>
+    <div id="photoList"></div>
+  </div>
+
+  <div class="card">
+    <h2>🧱 Material</h2>
+    <input id="material" placeholder="Material">
+    <div class="grid"><input id="qty" type="number" step="0.01" placeholder="Menge"><input id="unit" placeholder="Einheit, z. B. kg"></div>
+    <input id="note" placeholder="Notiz">
+    <button onclick="saveMaterial()">➕ Material hinzufügen</button>
+    <div id="matmsg"></div>
+    <div id="materialList"></div>
+  </div>
+
+  <div class="card">
+    <h2>📝 Tagesbericht</h2>
+    <textarea id="report" rows="5" placeholder="Heute ausgeführte Arbeiten"></textarea>
+    <input id="customer" placeholder="Kundenname">
+    <button onclick="saveReport()">Tagesbericht speichern</button>
+    <div id="reportmsg"></div>
+    <div id="reportList"></div>
+  </div>
+
+  <div class="card">
+    <h2>📅 Meine Stunden</h2>
+    <input id="myMonth" type="month">
+    <button onclick="loadMyHours()">Monat anzeigen</button>
+    <div class="grid">
+      <button class="secondary" onclick="shareHours('myHours','Meine Stunden')">📤 Stunden teilen</button>
+      <button class="secondary" onclick="printHours('myHours','Meine Stunden')">🖨️ Drucken / PDF</button>
+    </div>
+    <div id="myHours"></div>
+  </div>
+
+  <div id="chef" class="hidden">
+    <div class="card">
+      <h2>👷 Chefbereich</h2>
+      <input id="pname" placeholder="Neue Baustelle">
+      <input id="paddress" placeholder="Adresse">
+      <textarea id="pdesc" placeholder="Beschreibung"></textarea>
+      <button onclick="createProject()">Baustelle anlegen</button>
+      <div id="chefmsg"></div>
+
+      <hr><h2>👥 Mitarbeiter</h2>
+      <input id="employeeSearch" type="search" placeholder="Mitarbeiter suchen…" oninput="renderEmployees()">
+      <div id="employees"></div>
+
+      <h3>Baustelle zuweisen</h3>
+      <select id="assignEmployee"></select>
+      <select id="assignProject"></select>
+      <button onclick="assignProject()">Baustelle zuweisen</button>
+      <div id="assignmsg"></div>
+      <button onclick="createEmployee()">➕ Neuen Mitarbeiter anlegen</button>
+    </div>
+
+    <div class="card">
+      <h2>📅 Monats-Stundenzettel</h2>
+      <select id="chefHourEmployee"></select>
+      <input id="chefMonth" type="month">
+
+      <button onclick="loadChefMonth()">Stundenzettel anzeigen</button>
+
+      <div class="grid">
+        <button class="secondary" onclick="shareHours('chefMonthResult','Monats-Stundenzettel')">📤 STUNDENZETTEL TEILEN</button>
+        <button class="secondary" onclick="printHours('chefMonthResult','Monats-Stundenzettel')">🖨️ DRUCKEN / PDF</button>
+      </div>
+
+      <button class="secondary" onclick="newChefEntry()">➕ Zeit nachtragen</button>
+
+      <div id="chefMonthResult"></div>
+    </div>
+
+    <div class="card">
+      <h2>🕘 Änderungsprotokoll</h2>
+      <select id="auditEmployee"></select>
+      <div class="grid"><input id="auditFrom" type="date"><input id="auditTo" type="date"></div>
+      <button onclick="loadAudit()">Änderungen anzeigen</button>
+      <div id="auditResult"></div>
+    </div>
+
+    <div class="card">
+      <h2>📋 Baustellenbericht</h2>
+      <select id="reportProject"></select>
+      <button onclick="loadSiteReport()">Baustellenbericht laden</button>
+      <div class="grid">
+        <button class="secondary" onclick="shareHours('siteReport','Baustellenbericht')">📤 Bericht teilen</button>
+        <button class="secondary" onclick="printHours('siteReport','Baustellenbericht')">🖨️ Drucken / PDF</button>
+      </div>
+      <div id="siteReport"></div>
+    </div>
+  </div>
+</div>
+</main>
+
+<script>
+const SUPABASE_URL="https://qloxzpatoqwqnmcpdpps.supabase.co";
+const SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsb3h6cGF0b3F3cW5tY3BkcHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2MjMwMzYsImV4cCI6MjEwNjE5OTAzNn0.egK--S-CpRE3wP7r-T5aGP9njjU9zdPHcWatRu7ySuE";
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+let user=null,profile=null,currentProjects=[];
+let sessionId=null,started=null,pausedAt=null,pauseSeconds=0,ticker=null;
+let reminderTimer=null,gpsWatchId=null,gpsProjects=[];
+
+const $=id=>document.getElementById(id);
+const msg=(id,t)=>{let e=$(id);if(e)e.textContent=t};
+
+function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function fmtTime(v){return v?new Date(v).toLocaleTimeString("de-AT",{hour:"2-digit",minute:"2-digit"}):"–"}
+function fmtDate(v){return v?new Date(v).toLocaleString("de-AT",{dateStyle:"short",timeStyle:"short"}):"–"}
+function fmtDuration(sec){sec=Math.max(0,Math.round(sec||0));let h=Math.floor(sec/3600),m=Math.floor(sec%3600/60);return h+" Std "+String(m).padStart(2,"0")+" Min"}
+function workedSeconds(x){if((x.status||"arbeit")!=="arbeit")return 0;if(!x.ended_at)return null;return Math.max(0,Math.floor((new Date(x.ended_at)-new Date(x.started_at))/1000)-(x.pause_seconds||0))}
+function liveSeconds(x){let e=x.ended_at?new Date(x.ended_at):(x.paused_at?new Date(x.paused_at):new Date());return Math.max(0,Math.floor((e-new Date(x.started_at))/1000)-(x.pause_seconds||0))}
+function currentPauseSeconds(x){return (x.pause_seconds||0)+(x.paused_at&&!x.ended_at?Math.max(0,Math.floor((new Date()-new Date(x.paused_at))/1000)):0)}
+function targetSeconds(d){let w=d.getDay();return w>=1&&w<=4?28800:w===5?25200:0}
+function localDateKey(v){let d=v instanceof Date?v:new Date(v),p=n=>String(n).padStart(2,"0");return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())}
+function localInput(v){if(!v)return "";let d=new Date(v),p=n=>String(n).padStart(2,"0");return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+"T"+p(d.getHours())+":"+p(d.getMinutes())}
+function monthRange(v){let [y,m]=(v||"").split("-").map(Number);if(!y||!m)return null;return [new Date(y,m-1,1).toISOString(),new Date(y,m,1).toISOString()]}
+function setMonths(){let d=new Date(),v=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");$("myMonth").value=v;$("chefMonth").value=v}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
+
+async function login(){
+  let r=await sb.auth.signInWithPassword({email:$("email").value.trim(),password:$("password").value});
+  if(r.error)return msg("loginmsg","❌ "+r.error.message);
+  await boot(r.data.user);
+}
+async function logout(){await sb.auth.signOut();location.reload()}
+
+async function boot(u){
+  user=u;
+  let r=await sb.from("profiles").select("*").eq("id",u.id).single();
+  if(r.error)return msg("loginmsg","❌ Profil konnte nicht geladen werden: "+r.error.message);
+  profile=r.data;
+  if(profile.active===false)return msg("loginmsg","❌ Dieses Konto ist deaktiviert.");
+  $("login").classList.add("hidden");$("app").classList.remove("hidden");
+  $("welcome").textContent="Hallo "+profile.full_name+(profile.role==="chef"?" – Chef":"");
+  setMonths();
+  await loadProjects();
+  if(profile.role==="chef"){$("chef").classList.remove("hidden");await loadChefData()}
+  await restoreSession();
+  await Promise.all([loadMyHours(),loadMaterialList(),loadPhotoList(),loadDailyReports()]);
+  if(localStorage.getItem("pk-reminders")==="1")startReminders(false);
+}
+
+async function loadProjects(){
+  let r=await sb.from("projects").select("id,name,address").eq("active",true).order("name");
+  if(r.error){msg("workmsg","❌ Baustellen konnten nicht geladen werden: "+r.error.message);return}
+  currentProjects=r.data||[];
+  $("project").innerHTML=currentProjects.map(p=>`<option value="${p.id}">${esc(p.name)}${p.address?" – "+esc(p.address):""}</option>`).join("")||'<option value="">Keine Baustelle</option>';
+}
+async function projectChanged(){await Promise.all([loadPhotoList(),loadMaterialList(),loadDailyReports()])}
+
+/* Arbeitszeit */
+async function startWork(){
+  if(!$("project").value)return msg("workmsg","❌ Baustelle auswählen.");
+  if(sessionId)return msg("workmsg","ℹ️ Arbeitszeit läuft bereits.");
+  let r=await sb.from("work_sessions").insert({
+    user_id:user.id,project_id:$("project").value,started_at:new Date().toISOString(),
+    pause_seconds:0,paused_at:null,status:"arbeit",note:""
+  }).select().single();
+  if(r.error)return msg("workmsg","❌ "+r.error.message);
+  activateSession(r.data);
+  msg("workmsg","✅ Arbeitszeit gestartet");
+}
+function activateSession(s){
+  sessionId=s.id;started=new Date(s.started_at);pauseSeconds=s.pause_seconds||0;pausedAt=s.paused_at?new Date(s.paused_at):null;
+  if(s.project_id)$("project").value=s.project_id;
+  $("startBtn").classList.add("hidden");$("pauseBtn").textContent=pausedAt?"WEITER":"PAUSE";
+  clearInterval(ticker);tick();ticker=setInterval(tick,1000);
+}
+function tick(){
+  if(!started)return;
+  let e=pausedAt?pausedAt:new Date(),s=Math.max(0,Math.floor((e-started)/1000)-pauseSeconds);
+  $("timer").textContent=[Math.floor(s/3600),Math.floor(s%3600/60),s%60].map(x=>String(x).padStart(2,"0")).join(":");
+}
+async function togglePause(){
+  if(!sessionId)return msg("workmsg","Bitte zuerst START drücken.");
+  if(!pausedAt){
+    let n=new Date(),r=await sb.from("work_sessions").update({paused_at:n.toISOString()}).eq("id",sessionId);
+    if(r.error)return msg("workmsg","❌ "+r.error.message);
+    pausedAt=n;$("pauseBtn").textContent="WEITER";
+  }else{
+    let n=new Date(),p=pauseSeconds+Math.floor((n-pausedAt)/1000),r=await sb.from("work_sessions").update({pause_seconds:p,paused_at:null}).eq("id",sessionId);
+    if(r.error)return msg("workmsg","❌ "+r.error.message);
+    pauseSeconds=p;pausedAt=null;$("pauseBtn").textContent="PAUSE";
+  }
+}
+async function finishWork(){
+  if(!sessionId)return msg("workmsg","Keine laufende Arbeitszeit.");
+  let p=pauseSeconds;if(pausedAt)p+=Math.floor((new Date()-pausedAt)/1000);
+  let r=await sb.from("work_sessions").update({ended_at:new Date().toISOString(),pause_seconds:p,paused_at:null}).eq("id",sessionId);
+  if(r.error)return msg("workmsg","❌ "+r.error.message);
+  clearInterval(ticker);sessionId=null;started=null;pausedAt=null;pauseSeconds=0;
+  $("timer").textContent="00:00:00";$("startBtn").classList.remove("hidden");$("pauseBtn").textContent="PAUSE";
+  msg("workmsg","✅ Arbeitszeit gespeichert");await loadMyHours();
+}
+async function restoreSession(){
+  let r=await sb.from("work_sessions").select("*").eq("user_id",user.id).eq("status","arbeit").is("ended_at",null).order("started_at",{ascending:false}).limit(1);
+  if(r.error)return;
+  if(r.data?.length)activateSession(r.data[0]);
+}
+
+/* Start vergessen */
+function openForgotStart(){
+  if(sessionId)return msg("workmsg","ℹ️ Es läuft bereits eine Arbeitszeit.");
+  let n=new Date(),d=new Date(n.getFullYear(),n.getMonth(),n.getDate(),7,0);
+  $("forgotStart").value=localInput(d);$("forgotNote").value="";$("forgotBox").classList.remove("hidden");
+  $("forgotBox").scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+function closeForgotStart(){$("forgotBox").classList.add("hidden")}
+async function saveForgotStart(){
+  if(sessionId)return alert("Es läuft bereits eine Arbeitszeit.");
+  if(!$("project").value)return alert("Bitte Baustelle auswählen.");
+  let v=$("forgotStart").value;if(!v)return alert("Bitte Startzeit eingeben.");
+  let d=new Date(v);if(d>new Date())return alert("Die Startzeit darf nicht in der Zukunft liegen.");
+  let note=$("forgotNote").value.trim();
+  let r=await sb.from("work_sessions").insert({
+    user_id:user.id,project_id:$("project").value,started_at:d.toISOString(),pause_seconds:0,paused_at:null,status:"arbeit",
+    note:"Start vergessen"+(note?": "+note:"")
+  }).select().single();
+  if(r.error)return alert("❌ "+r.error.message);
+  closeForgotStart();activateSession(r.data);msg("workmsg","✅ Startzeit wurde nachgetragen. Die Zeit läuft jetzt weiter.");
+}
+
+/* Krank / Urlaub */
+async function saveDayStatus(status){
+  if(sessionId)return msg("statusmsg","❌ Laufende Arbeitszeit zuerst beenden.");
+  if(!$("project").value)return msg("statusmsg","❌ Baustelle auswählen.");
+  let n=new Date(),s=new Date(n.getFullYear(),n.getMonth(),n.getDate(),8,0);
+  let r=await sb.from("work_sessions").insert({
+    user_id:user.id,project_id:$("project").value,started_at:s.toISOString(),ended_at:s.toISOString(),
+    pause_seconds:0,paused_at:null,status,note:$("dayNote").value.trim()
+  });
+  if(r.error)return msg("statusmsg","❌ "+r.error.message);
+  $("dayNote").value="";
+  msg("statusmsg",status==="krank"?"✅ Krank eingetragen":"✅ Urlaub eingetragen");
+  await loadMyHours();
+}
+
+/* Monatsstunden */
+async function hoursHtml(uid,month,editable=false){
+  let rg=monthRange(month);if(!rg)return "Bitte Monat auswählen.";
+  let [ws,pj,pr]=await Promise.all([
+    sb.from("work_sessions").select("*").eq("user_id",uid).gte("started_at",rg[0]).lt("started_at",rg[1]).order("started_at"),
+    sb.from("projects").select("id,name"),
+    sb.from("profiles").select("id,full_name").eq("id",uid).single()
+  ]);
+  if(ws.error)return "❌ "+esc(ws.error.message);
+
+  let pmap=Object.fromEntries((pj.data||[]).map(x=>[x.id,x.name])),days={};
+  for(let x of ws.data||[])(days[localDateKey(x.started_at)]??=[]).push(x);
+
+  let [y,m]=month.split("-").map(Number),monthlyTarget=(169*3600+30*60),totalCredit=0,rows=[];
+
+  for(let d=new Date(y,m-1,1);d<new Date(y,m,1);d.setDate(d.getDate()+1)){
+    let items=days[localDateKey(d)]||[],target=targetSeconds(d);
+    let vacation=items.some(x=>x.status==="urlaub"),sick=items.some(x=>x.status==="krank");
+    if(vacation)monthlyTarget=Math.max(0,monthlyTarget-target);
+
+    let workItems=items.filter(x=>(x.status||"arbeit")==="arbeit");
+    let completed=0,live=0,pauseTotal=0;
+
+    for(let x of workItems){
+      let s=workedSeconds(x);
+      if(s===null)live+=liveSeconds(x);else completed+=s;
+      pauseTotal+=currentPauseSeconds(x);
+    }
+
+    let dayCredit=vacation?0:sick?target:completed;
+    totalCredit+=dayCredit;
+    if(!items.length)continue;
+
+    let shown=vacation?0:sick?target:completed+live;
+    let delta=(vacation||sick)?0:shown-target;
+    let cls=delta>0?"plus":delta<0?"minus":"neutral";
+    let ds=(delta>0?"+":delta<0?"−":"")+fmtDuration(Math.abs(delta));
+    let status=vacation?"🏖️ Urlaub":sick?"🤒 Krank":"🔨 Arbeit";
+
+    let details=items.map(x=>{
+      let pn=esc(pmap[x.project_id]||"Baustelle");
+      return `${pn}${x.note?" · "+esc(x.note):""}`;
+    }).join("<br>");
+
+    let beginText="–",endText="–",pauseText="–";
+    if(!vacation&&!sick&&workItems.length){
+      beginText=workItems.map(x=>fmtTime(x.started_at)).join("<br>");
+      endText=workItems.map(x=>x.ended_at?fmtTime(x.ended_at):"läuft").join("<br>");
+      pauseText=Math.floor(pauseTotal/60)+" Min";
+    }
+
+    let edit=editable?items.map(x=>`<button class="secondary" style="padding:8px;margin:2px 0" onclick="openEdit('${x.id}')">✏️ Bearbeiten</button>`).join(""):"";
+
+    rows.push(`<tr>
+      <td>${d.toLocaleDateString("de-AT")}</td>
+      <td><b>${status}</b><br><small>${details}</small></td>
+      <td>${beginText}</td>
+      <td>${endText}</td>
+      <td>${pauseText}</td>
+      <td>${fmtDuration(shown)}${live?'<br><small>laufend</small>':""}</td>
+      <td class="${cls}"><b>${vacation||sick?"0 Std 00 Min":ds}</b></td>
+      ${editable?`<td>${edit}</td>`:""}
+    </tr>`);
+  }
+
+  let normal=Math.min(totalCredit,monthlyTarget),overtime=Math.max(0,totalCredit-monthlyTarget);
+
+  return `<h3>${esc(pr.data?.full_name||"Mitarbeiter")} – ${esc(month)}</h3>
+  <div class="scroll"><table>
+    <tr><th>Datum</th><th>Status / Baustelle</th><th>Beginn</th><th>Ende</th><th>Pause</th><th>Stunden</th><th>+/−</th>${editable?"<th></th>":""}</tr>
+    ${rows.join("")||`<tr><td colspan="${editable?8:7}">Keine Einträge.</td></tr>`}
+  </table></div>
+  <div class="total">Sollstunden: ${fmtDuration(monthlyTarget)}<br>Normalstunden: ${fmtDuration(normal)}<br>Überstunden: ${fmtDuration(overtime)}</div>
+  ${editable?'<div id="editSession"></div>':""}`;
+}
+async function loadMyHours(){$("myHours").innerHTML=await hoursHtml(user.id,$("myMonth").value)}
+async function loadChefMonth(){$("chefMonthResult").innerHTML="Wird geladen…";$("chefMonthResult").innerHTML=await hoursHtml($("chefHourEmployee").value,$("chefMonth").value,true)}
+
+/* Teilen & Drucken */
+async function shareHours(elementId,title){
+  const el=$(elementId);if(!el||!el.innerText.trim())return alert("Bitte zuerst die Daten anzeigen.");
+  const text=el.innerText.trim();
+  if(navigator.share){
+    try{await navigator.share({title,text})}catch(e){if(e?.name!=="AbortError")alert("Teilen war nicht möglich.")}
+  }else if(navigator.clipboard){
+    await navigator.clipboard.writeText(text);alert("✅ Inhalt wurde kopiert.");
+  }else alert("Teilen wird auf diesem Gerät nicht unterstützt.");
+}
+function printHours(elementId,title){
+  const el=$(elementId);
+  if(!el || !el.innerHTML.trim()) return alert("Bitte zuerst die Daten anzeigen.");
+
+  const oldArea=document.getElementById("pkPrintArea");
+  const oldStyle=document.getElementById("pkPrintStyle");
+  if(oldArea) oldArea.remove();
+  if(oldStyle) oldStyle.remove();
+
+  const area=document.createElement("div");
+  area.id="pkPrintArea";
+  area.innerHTML=`<h1>Pflasterbau Kabashi</h1><h2>${esc(title)}</h2>${el.innerHTML}`;
+  document.body.appendChild(area);
+
+  const style=document.createElement("style");
+  style.id="pkPrintStyle";
+  style.textContent=`
+    @media screen{
+      #pkPrintArea{display:none!important}
+    }
+    @media print{
+      body *{visibility:hidden!important}
+      #pkPrintArea,#pkPrintArea *{visibility:visible!important}
+      #pkPrintArea{
+        display:block!important;
+        position:absolute!important;
+        left:0!important;
+        top:0!important;
+        width:100%!important;
+        padding:12px!important;
+        background:white!important;
+        color:black!important;
+        box-sizing:border-box!important
+      }
+      #pkPrintArea h1{font-size:22px!important;margin:0 0 8px!important}
+      #pkPrintArea h2{font-size:18px!important;margin:0 0 12px!important}
+      #pkPrintArea table{width:100%!important;border-collapse:collapse!important}
+      #pkPrintArea th,#pkPrintArea td{
+        font-size:11px!important;
+        padding:6px!important;
+        border-bottom:1px solid #ccc!important;
+        text-align:left!important;
+        vertical-align:top!important
+      }
+      #pkPrintArea .total{font-size:16px!important;font-weight:700!important;line-height:1.5!important}
+      #pkPrintArea button{display:none!important}
+      #pkPrintArea .photoGrid{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important}
+      #pkPrintArea img{max-width:100%!important;height:auto!important}
+    }`;
+  document.head.appendChild(style);
+
+  window.print();
+}
+
+/* Fotos */
+async function uploadPhoto(){
+  let f=$("photo").files[0];if(!f||!$("project").value)return msg("photomsg","❌ Foto und Baustelle auswählen.");
+  let path=`${user.id}/${Date.now()}-${f.name.replace(/[^a-zA-Z0-9._-]/g,"_")}`;
+  let up=await sb.storage.from("project-files").upload(path,f);if(up.error)return msg("photomsg","❌ "+up.error.message);
+  let r=await sb.from("project_photos").insert({project_id:$("project").value,user_id:user.id,storage_path:path,caption:$("caption").value.trim()});
+  msg("photomsg",r.error?"❌ "+r.error.message:"✅ Foto gespeichert");
+  if(!r.error){$("photo").value="";$("caption").value="";await loadPhotoList()}
+}
+async function loadPhotoList(){
+  if(!$("project").value)return;
+  let r=await sb.from("project_photos").select("*").eq("project_id",$("project").value).order("created_at",{ascending:false}).limit(12);
+  if(r.error)return;
+  let a=[];
+  for(let x of r.data||[]){let s=await sb.storage.from("project-files").createSignedUrl(x.storage_path,3600);if(!s.error)a.push(`<div class="item"><img src="${s.data.signedUrl}" style="width:100%;border-radius:10px"><br>${esc(x.caption||"")}<br><small>${fmtDate(x.created_at)}</small></div>`)}
+  $("photoList").innerHTML=a.join("");
+}
+
+/* Material */
+async function saveMaterial(){
+  if(!$("project").value)return msg("matmsg","❌ Baustelle auswählen.");
+  if(!$("material").value.trim())return msg("matmsg","❌ Material eingeben.");
+  let r=await sb.from("materials").insert({project_id:$("project").value,user_id:user.id,material:$("material").value.trim(),quantity:Number($("qty").value)||0,unit:$("unit").value.trim(),note:$("note").value.trim()});
+  msg("matmsg",r.error?"❌ "+r.error.message:"✅ Material gespeichert");
+  if(!r.error){$("material").value=$("qty").value=$("unit").value=$("note").value="";await loadMaterialList()}
+}
+async function loadMaterialList(){
+  if(!$("project").value)return;
+  let r=await sb.from("materials").select("*").eq("project_id",$("project").value).order("created_at",{ascending:false}).limit(30);
+  if(r.error)return;
+  $("materialList").innerHTML=(r.data||[]).map(x=>`<div class="item"><b>${esc(x.material)}</b> – ${esc(x.quantity)} ${esc(x.unit)}${x.note?`<br><small>${esc(x.note)}</small>`:""}<br><small>${fmtDate(x.created_at)}</small></div>`).join("");
+}
+
+/* Tagesberichte */
+async function saveReport(){
+  if(!$("project").value)return msg("reportmsg","❌ Baustelle auswählen.");
+  if(!$("report").value.trim())return msg("reportmsg","❌ Bericht eingeben.");
+  let r=await sb.from("daily_reports").insert({project_id:$("project").value,user_id:user.id,report_date:localDateKey(new Date()),report_text:$("report").value.trim(),customer_name:$("customer").value.trim()});
+  msg("reportmsg",r.error?"❌ "+r.error.message:"✅ Tagesbericht gespeichert");
+  if(!r.error){$("report").value=$("customer").value="";await loadDailyReports()}
+}
+async function loadDailyReports(){
+  if(!$("project").value)return;
+  let r=await sb.from("daily_reports").select("*").eq("project_id",$("project").value).order("created_at",{ascending:false}).limit(10);
+  if(r.error)return;
+  $("reportList").innerHTML=(r.data||[]).map(x=>`<div class="item"><b>${esc(x.report_date||"")}</b><br>${esc(x.report_text||"")}${x.customer_name?`<br><small>Kunde: ${esc(x.customer_name)}</small>`:""}</div>`).join("");
+}
+
+/* Chef: Mitarbeiter & Baustellen */
+let chefEmployees=[],chefMemberships=[],chefProjects=[];
+function renderEmployees(){
+  if(profile?.role!=="chef")return;
+  let q=($("employeeSearch")?.value||"").trim().toLowerCase();
+  let rows=chefEmployees.filter(u=>!q||u.full_name.toLowerCase().includes(q));
+  $("employees").innerHTML=rows.map(u=>{
+    let sites=chefMemberships.filter(x=>x.user_id===u.id).map(x=>{
+      let p=chefProjects.find(z=>z.id===x.project_id);if(!p)return "";
+      return `<div style="display:flex;align-items:center;gap:8px;margin-top:6px"><small style="flex:1">📍 ${esc(p.name)}</small>${u.role!=="chef"?`<button class="secondary" style="width:auto;padding:7px 10px;margin:0" onclick="removeAssignment('${u.id}','${p.id}')">Entfernen</button>`:""}</div>`;
+    }).join("");
+    return `<div class="item"><div style="display:flex;align-items:center;gap:8px"><div style="flex:1"><b>${esc(u.full_name)}</b> ${u.role==="chef"?"👑":""}<br><small>${u.active?"🟢 Aktiv":"⚪ Inaktiv"}</small></div>
+    ${u.role!=="chef"?`<button class="${u.active?"danger":"secondary"}" style="width:auto;padding:9px 12px;margin:0" onclick="toggleEmployeeActive('${u.id}',${u.active})">${u.active?"Deaktivieren":"Aktivieren"}</button>`:""}</div>
+    <div style="margin-top:6px">${sites||"<small>Baustellen: keine</small>"}</div></div>`;
+  }).join("")||"Keine Mitarbeiter gefunden.";
+}
+async function toggleEmployeeActive(uid,isActive){
+  if(!confirm(isActive?"Mitarbeiter wirklich deaktivieren?":"Mitarbeiter wieder aktivieren?"))return;
+  let r=await sb.from("profiles").update({active:!isActive}).eq("id",uid);if(r.error)return alert("❌ "+r.error.message);await loadChefData();
+}
+async function removeAssignment(uid,pid){
+  if(!confirm("Baustellen-Zuweisung wirklich entfernen?"))return;
+  let r=await sb.from("project_members").delete().eq("user_id",uid).eq("project_id",pid);if(r.error)return alert("❌ "+r.error.message);await loadChefData();
+}
+async function createProject(){
+  if(!$("pname").value.trim())return msg("chefmsg","❌ Name fehlt.");
+  let r=await sb.from("projects").insert({name:$("pname").value.trim(),address:$("paddress").value.trim(),description:$("pdesc").value.trim(),active:true});
+  msg("chefmsg",r.error?"❌ "+r.error.message:"✅ Baustelle angelegt");
+  if(!r.error){$("pname").value=$("paddress").value=$("pdesc").value="";await loadProjects();await loadChefData()}
+}
+async function assignProject(){
+  let uid=$("assignEmployee").value,pid=$("assignProject").value;if(!uid||!pid)return msg("assignmsg","❌ Mitarbeiter und Baustelle auswählen.");
+  let r=await sb.from("project_members").insert({user_id:uid,project_id:pid});
+  if(r.error){if(r.error.code==="23505")return msg("assignmsg","ℹ️ Mitarbeiter ist dieser Baustelle bereits zugewiesen.");return msg("assignmsg","❌ "+r.error.message)}
+  msg("assignmsg","✅ Baustelle zugewiesen");await loadChefData();
+}
+async function loadChefData(){
+  if(profile?.role!=="chef")return;
+  let [pr,pm,pj]=await Promise.all([
+    sb.from("profiles").select("id,full_name,role,active").order("full_name"),
+    sb.from("project_members").select("project_id,user_id"),
+    sb.from("projects").select("id,name,address,active").order("name")
+  ]);
+  if(pr.error||pm.error||pj.error)return alert("Chef-Daten konnten nicht geladen werden.");
+  chefEmployees=pr.data||[];chefMemberships=pm.data||[];chefProjects=pj.data||[];
+  renderEmployees();
+  let active=chefEmployees.filter(u=>u.active);
+  $("assignEmployee").innerHTML=active.filter(u=>u.role!=="chef").map(u=>`<option value="${u.id}">${esc(u.full_name)}</option>`).join("")||'<option value="">Keine Mitarbeiter</option>';
+  $("chefHourEmployee").innerHTML=active.map(u=>`<option value="${u.id}">${esc(u.full_name)}</option>`).join("");
+  $("auditEmployee").innerHTML='<option value="">Alle Mitarbeiter</option>'+chefEmployees.map(u=>`<option value="${u.id}">${esc(u.full_name)}${u.active?"":" (inaktiv)"}</option>`).join("");
+  let opts=chefProjects.map(p=>`<option value="${p.id}">${esc(p.name)}${p.address?" – "+esc(p.address):""}</option>`).join("");
+  $("assignProject").innerHTML=opts||'<option value="">Keine Baustellen</option>';
+  $("reportProject").innerHTML=opts||'<option value="">Keine Baustellen</option>';
+}
+
+/* Chef: Zeiteinträge */
+async function openEdit(id){
+  let r=await sb.from("work_sessions").select("*").eq("id",id).single();if(r.error)return alert(r.error.message);
+  renderEditForm(r.data,false);
+}
+function newChefEntry(){
+  let uid=$("chefHourEmployee").value;if(!uid)return alert("Mitarbeiter auswählen.");
+  let [y,m]=($("chefMonth").value||localDateKey(new Date()).slice(0,7)).split("-").map(Number);
+  let d=new Date();if(d.getFullYear()!==y||d.getMonth()+1!==m)d=new Date(y,m-1,1,7,0);
+  let fake={id:"",project_id:chefProjects[0]?.id||"",status:"arbeit",started_at:new Date(d.getFullYear(),d.getMonth(),d.getDate(),7,0).toISOString(),ended_at:new Date(d.getFullYear(),d.getMonth(),d.getDate(),16,0).toISOString(),pause_seconds:0,paused_at:null,note:""};
+  renderEditForm(fake,true);
+}
+function renderEditForm(x,isNew){
+  let opts=chefProjects.map(p=>`<option value="${p.id}" ${p.id===x.project_id?"selected":""}>${esc(p.name)}</option>`).join("");
+  let host=$("editSession");
+  if(!host){$("chefMonthResult").insertAdjacentHTML("beforeend",'<div id="editSession"></div>');host=$("editSession")}
+  host.innerHTML=`<div class="editbox"><h3>${isNew?"➕ Arbeitszeit nachtragen":"✏️ Eintrag bearbeiten"}</h3>
+  <input id="editId" type="hidden" value="${esc(x.id||"")}"><input id="editIsNew" type="hidden" value="${isNew?"1":"0"}">
+  <label>Baustelle</label><select id="editProject">${opts}</select>
+  <label>Status</label><select id="editStatus">
+    <option value="arbeit" ${(x.status||"arbeit")==="arbeit"?"selected":""}>Arbeit</option>
+    <option value="krank" ${x.status==="krank"?"selected":""}>Krank</option>
+    <option value="urlaub" ${x.status==="urlaub"?"selected":""}>Urlaub</option>
+  </select>
+  <label>Datum / Start</label><input id="editStart" type="datetime-local" value="${localInput(x.started_at)}">
+  <label>Ende (bei laufender Arbeit leer lassen)</label><input id="editEnd" type="datetime-local" value="${localInput(x.ended_at)}">
+  <label>Pause in Minuten</label><input id="editPause" type="number" min="0" value="${Math.floor((x.pause_seconds||0)/60)}">
+  <label>Notiz</label><input id="editNote" value="${esc(x.note||"")}" placeholder="Notiz">
+  <button onclick="saveChefEdit()">${isNew?"Eintrag anlegen":"Änderungen speichern"}</button>
+  ${!isNew&&!x.ended_at?(x.paused_at?'<button class="secondary" onclick="chefResume()">▶️ Pause beenden</button>':'<button class="secondary" onclick="chefPause()">⏸ Pause starten</button>'):""}
+  ${!isNew&&!x.ended_at?'<button class="danger" onclick="chefFinish()">⏹ Schicht jetzt beenden</button>':""}
+  ${!isNew?'<button class="danger" onclick="deleteChefEntry()">🗑️ Eintrag löschen</button>':""}</div>`;
+  host.scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+async function saveChefEdit(){
+  let isNew=$("editIsNew").value==="1",id=$("editId").value,status=$("editStatus").value,start=$("editStart").value,end=$("editEnd").value;
+  if(!start)return alert("Startzeit fehlt.");
+  if(status!=="arbeit"&&!end)end=start;
+  let patch={project_id:$("editProject").value,status,note:$("editNote").value.trim(),started_at:new Date(start).toISOString(),ended_at:end?new Date(end).toISOString():null,pause_seconds:status==="arbeit"?Math.max(0,Number($("editPause").value)||0)*60:0,paused_at:null};
+  let r;
+  if(isNew)r=await sb.from("work_sessions").insert({...patch,user_id:$("chefHourEmployee").value});
+  else r=await sb.from("work_sessions").update(patch).eq("id",id);
+  if(r.error)return alert("❌ "+r.error.message);
+  await loadChefMonth();await loadAudit();alert(isNew?"✅ Eintrag angelegt":"✅ Arbeitszeit geändert");
+}
+async function deleteChefEntry(){
+  if(!confirm("Eintrag wirklich löschen?"))return;
+  let r=await sb.from("work_sessions").delete().eq("id",$("editId").value);if(r.error)return alert("❌ "+r.error.message);
+  await loadChefMonth();await loadAudit();
+}
+async function chefPause(){
+  let id=$("editId").value,r=await sb.from("work_sessions").update({paused_at:new Date().toISOString()}).eq("id",id);if(r.error)return alert("❌ "+r.error.message);await loadChefMonth();await loadAudit();
+}
+async function chefResume(){
+  let id=$("editId").value,r=await sb.from("work_sessions").select("pause_seconds,paused_at").eq("id",id).single();if(r.error)return alert("❌ "+r.error.message);
+  let add=r.data.paused_at?Math.max(0,Math.floor((new Date()-new Date(r.data.paused_at))/1000)):0;
+  let u=await sb.from("work_sessions").update({pause_seconds:(r.data.pause_seconds||0)+add,paused_at:null}).eq("id",id);if(u.error)return alert("❌ "+u.error.message);
+  await loadChefMonth();await loadAudit();
+}
+async function chefFinish(){
+  let id=$("editId").value,r=await sb.from("work_sessions").select("pause_seconds,paused_at").eq("id",id).single();if(r.error)return alert("❌ "+r.error.message);
+  let add=r.data.paused_at?Math.max(0,Math.floor((new Date()-new Date(r.data.paused_at))/1000)):0;
+  let u=await sb.from("work_sessions").update({ended_at:new Date().toISOString(),pause_seconds:(r.data.pause_seconds||0)+add,paused_at:null}).eq("id",id);if(u.error)return alert("❌ "+u.error.message);
+  await loadChefMonth();await loadAudit();
+}
+
+/* Änderungsprotokoll */
+async function loadAudit(){
+  if(profile?.role!=="chef")return;
+  let [au,ws,pr]=await Promise.all([
+    sb.from("work_session_audit").select("*").order("changed_at",{ascending:false}).limit(300),
+    sb.from("work_sessions").select("id,user_id"),
+    sb.from("profiles").select("id,full_name")
+  ]);
+  if(au.error)return $("auditResult").innerHTML="❌ "+esc(au.error.message);
+  let smap=Object.fromEntries((ws.data||[]).map(x=>[x.id,x.user_id])),pmap=Object.fromEntries((pr.data||[]).map(x=>[x.id,x.full_name]));
+  let emp=$("auditEmployee").value,from=$("auditFrom").value?new Date($("auditFrom").value+"T00:00:00"):null,to=$("auditTo").value?new Date($("auditTo").value+"T23:59:59"):null;
+  let data=(au.data||[]).filter(a=>{let d=new Date(a.changed_at),uid=smap[a.work_session_id];return(!emp||uid===emp)&&(!from||d>=from)&&(!to||d<=to)});
+  $("auditResult").innerHTML=data.map(a=>{
+    let uid=smap[a.work_session_id],changes=[];
+    if(a.old_started_at!==a.new_started_at)changes.push(`Start: ${fmtDate(a.old_started_at)} → ${fmtDate(a.new_started_at)}`);
+    if(a.old_ended_at!==a.new_ended_at)changes.push(`Ende: ${fmtDate(a.old_ended_at)} → ${fmtDate(a.new_ended_at)}`);
+    if(a.old_pause_seconds!==a.new_pause_seconds)changes.push(`Pause: ${Math.floor((a.old_pause_seconds||0)/60)} → ${Math.floor((a.new_pause_seconds||0)/60)} Min`);
+    if(a.old_paused_at!==a.new_paused_at)changes.push(`Pausenstatus: ${a.old_paused_at?"Pause":"Arbeit"} → ${a.new_paused_at?"Pause":"Arbeit"}`);
+    return `<div class="item"><b>${esc(pmap[uid]||"Mitarbeiter")}</b><br><small>${fmtDate(a.changed_at)} · geändert von ${esc(pmap[a.changed_by]||"System")}</small><br>${changes.map(esc).join("<br>")||"Eintrag geändert"}</div>`;
+  }).join("")||"Keine Änderungen im gewählten Zeitraum.";
+}
+
+/* Baustellenbericht */
+async function loadSiteReport(){
+  let pid=$("reportProject").value;if(!pid)return;
+  let pName=$("reportProject").selectedOptions[0]?.textContent||"Baustelle";
+  $("siteReport").innerHTML="Wird geladen…";
+  let [ws,ma,ph,dr,pr]=await Promise.all([
+    sb.from("work_sessions").select("user_id,started_at,ended_at,pause_seconds,paused_at,status,note").eq("project_id",pid).order("started_at"),
+    sb.from("materials").select("user_id,material,quantity,unit,note,created_at").eq("project_id",pid).order("created_at"),
+    sb.from("project_photos").select("user_id,storage_path,caption,created_at").eq("project_id",pid).order("created_at"),
+    sb.from("daily_reports").select("user_id,report_date,report_text,customer_name,created_at").eq("project_id",pid).order("report_date"),
+    sb.from("profiles").select("id,full_name")
+  ]);
+  for(let r of [ws,ma,ph,dr,pr])if(r.error)return $("siteReport").innerHTML="❌ "+esc(r.error.message);
+  let umap=Object.fromEntries((pr.data||[]).map(x=>[x.id,x.full_name])),tot={};
+  let workRows=(ws.data||[]).filter(x=>(x.status||"arbeit")==="arbeit").map(x=>{
+    let s=workedSeconds(x);if(s!==null)tot[x.user_id]=(tot[x.user_id]||0)+s;let shown=s===null?liveSeconds(x):s;
+    return `<div class="item"><b>${esc(umap[x.user_id]||"Mitarbeiter")}</b><br><small>${fmtDate(x.started_at)} → ${fmtDate(x.ended_at)} · Pause ${Math.floor(currentPauseSeconds(x)/60)} Min${x.paused_at&&!x.ended_at?" ⏸":""}</small><br><b>${s===null?"aktuell: ":""}${fmtDuration(shown)}</b>${x.note?`<br><small>${esc(x.note)}</small>`:""}</div>`;
+  }).join("");
+  let absRows=(ws.data||[]).filter(x=>(x.status||"arbeit")!=="arbeit").map(x=>`<div class="item"><b>${esc(umap[x.user_id]||"Mitarbeiter")}</b> · ${x.status==="krank"?"🤒 Krank":"🏖️ Urlaub"}<br><small>${new Date(x.started_at).toLocaleDateString("de-AT")}${x.note?" · "+esc(x.note):""}</small></div>`).join("");
+  let sums=Object.entries(tot).map(([u,s])=>`<div><b>${esc(umap[u]||"Mitarbeiter")}:</b> ${fmtDuration(s)}</div>`).join("");
+  let mh=(ma.data||[]).map(x=>`<div class="item"><b>${esc(x.material)}</b> – ${esc(x.quantity)} ${esc(x.unit)} · ${esc(umap[x.user_id]||"Mitarbeiter")}${x.note?`<br><small>${esc(x.note)}</small>`:""}</div>`).join("");
+  let rh=(dr.data||[]).map(x=>`<div class="item"><b>${esc(x.report_date||"")} · ${esc(umap[x.user_id]||"Mitarbeiter")}</b><br>${esc(x.report_text||"")}${x.customer_name?`<br><small>Kunde: ${esc(x.customer_name)}</small>`:""}</div>`).join("");
+  let photos=[];
+  for(let x of (ph.data||[])){let s=await sb.storage.from("project-files").createSignedUrl(x.storage_path,3600);if(!s.error)photos.push(`<div class="item"><b>${esc(umap[x.user_id]||"Mitarbeiter")}</b> · ${fmtDate(x.created_at)}<br>${x.caption?esc(x.caption)+"<br>":""}<img src="${s.data.signedUrl}" alt="Baustellenfoto"></div>`)}
+  $("siteReport").innerHTML=`<h2>${esc(pName)}</h2><h3>Arbeitsstunden</h3>${sums||"Keine abgeschlossenen Stunden."}${workRows}
+  ${absRows?`<h3>Krank / Urlaub</h3>${absRows}`:""}<h3>Material</h3>${mh||"Keine Materialien."}<h3>Tagesberichte</h3>${rh||"Keine Tagesberichte."}<h3>Fotos</h3><div class="photoGrid">${photos.join("")||"Keine Fotos."}</div>`;
+}
+
+/* Erinnerungen: 08:30 + GPS, nur Erinnerung */
+async function enableReminders(){
+  localStorage.setItem("pk-reminders","1");
+  if("Notification" in window && Notification.permission==="default"){
+    try{await Notification.requestPermission()}catch(e){}
+  }
+  startReminders(true);
+}
+async function startReminders(userAction){
+  if(reminderTimer)clearInterval(reminderTimer);
+  reminderTimer=setInterval(checkTimeReminder,60000);
+  checkTimeReminder();
+  if(!navigator.geolocation){msg("remindermsg","⚠️ GPS wird von diesem Gerät/Browser nicht unterstützt.");return}
+  if(gpsWatchId!==null){try{navigator.geolocation.clearWatch(gpsWatchId)}catch(e){}gpsWatchId=null}
+  msg("remindermsg","GPS-Baustellen werden vorbereitet…");
+  gpsProjects=await geocodeProjects(currentProjects);
+  gpsWatchId=navigator.geolocation.watchPosition(checkNearbyProjects,err=>{
+    if(userAction)msg("remindermsg","⚠️ Standortfreigabe wurde nicht erteilt oder ist nicht verfügbar.");
+  },{enableHighAccuracy:true,maximumAge:60000,timeout:15000});
+  msg("remindermsg",`✅ Erinnerungen aktiv. ${gpsProjects.length} Baustelle(n) für GPS erkannt.`);
+}
+async function checkTimeReminder(){
+  if(!user||sessionId)return;
+  let n=new Date();if(targetSeconds(n)===0)return;
+  if(n.getHours()<8||(n.getHours()===8&&n.getMinutes()<30))return;
+  let day=localDateKey(n),k="pk-time-"+day;if(localStorage.getItem(k))return;
+  let start=new Date(n.getFullYear(),n.getMonth(),n.getDate(),0,0).toISOString(),end=new Date(n.getFullYear(),n.getMonth(),n.getDate()+1,0,0).toISOString();
+  let r=await sb.from("work_sessions").select("id").eq("user_id",user.id).gte("started_at",start).lt("started_at",end).limit(1);
+  if(r.error||r.data?.length)return;
+  localStorage.setItem(k,"1");showReminder("⏰ Du hast heute noch keine Arbeitszeit gestartet.");
+}
+async function geocodeProjects(projects){
+  let out=[];
+  for(let p of projects){
+    if(!p.address)continue;
+    let cacheKey="pk-geo-"+p.address.toLowerCase(),cached=localStorage.getItem(cacheKey);
+    if(cached){try{let g=JSON.parse(cached);out.push({...p,...g});continue}catch(e){}}
+    try{
+      let q=encodeURIComponent(p.address+", Österreich");
+      let r=await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=de&q=${q}`);
+      let a=await r.json();
+      if(a?.[0]){
+        let g={lat:Number(a[0].lat),lon:Number(a[0].lon)};
+        localStorage.setItem(cacheKey,JSON.stringify(g));out.push({...p,...g});
+      }
+    }catch(e){}
+    await sleep(1100);
+  }
+  return out;
+}
+function distanceMeters(a,b,c,d){
+  const R=6371000,rad=x=>x*Math.PI/180,dp=rad(c-a),dl=rad(d-b);
+  const h=Math.sin(dp/2)**2+Math.cos(rad(a))*Math.cos(rad(c))*Math.sin(dl/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+function checkNearbyProjects(pos){
+  if(sessionId)return;
+  let lat=pos.coords.latitude,lon=pos.coords.longitude,day=localDateKey(new Date());
+  for(let p of gpsProjects){
+    let dist=distanceMeters(lat,lon,p.lat,p.lon);
+    if(dist<=150){
+      let k="pk-gps-"+day+"-"+p.id;if(localStorage.getItem(k))continue;
+      localStorage.setItem(k,"1");
+      showReminder(`📍 Du bist bei „${p.name}“. Arbeitszeit starten?`);
+      break;
+    }
+  }
+}
+function showReminder(text){
+  let b=$("reminderBanner");b.textContent=text;b.classList.remove("hidden");
+  setTimeout(()=>b.classList.add("hidden"),15000);
+  if("Notification" in window && Notification.permission==="granted"){
+    try{new Notification("Pflasterbau Kabashi",{body:text})}catch(e){}
+  }
+}
+
+/* Mitarbeiter anlegen */
+async function createEmployee(){
+  const full_name=prompt("Name des neuen Mitarbeiters:");if(!full_name)return;
+  const email=prompt("E-Mail-Adresse des Mitarbeiters:");if(!email)return;
+  const {data:{session}}=await sb.auth.getSession();if(!session)return alert("Bitte neu anmelden.");
+  const r=await fetch(SUPABASE_URL+"/functions/v1/create-employee",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token,"apikey":SUPABASE_KEY},body:JSON.stringify({full_name,email,project_ids:[]})});
+  const result=await r.json();
+  if(!r.ok||!result.success)return alert("Fehler: "+(result.error||"Mitarbeiter konnte nicht angelegt werden."));
+  alert("Mitarbeiter wurde angelegt und eingeladen.");await loadChefData();
+}
+
+sb.auth.getSession().then(x=>{if(x.data.session)boot(x.data.session.user)});
+</script>
+</body>
+</html>
