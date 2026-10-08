@@ -128,7 +128,7 @@ async function hoursHtml(uid,month,editable=false){
       <td>${st==="arbeit"?(x.ended_at?fmtTime(x.ended_at):"läuft"):"–"}</td>
       <td>${st==="arbeit"?(Math.floor(pause/60)+" Min"+(x.paused_at&&!x.ended_at?" ⏸":"")):"–"}</td>
       <td><b>${st==="arbeit"&&done===null?"aktuell: ":""}${fmtDuration(shown)}</b></td>
-      ${editable?`<td>${st==="arbeit"?`<button class="secondary" onclick="openEdit('${x.id}')">✏️</button>`:""}</td>`:""}
+      ${editable?`<td>${`<button class="secondary" onclick="openEdit('${x.id}')">✏️</button>`}</td>`:""}
     </tr>`;
   }).join("");
   return `<h3>${esc(pr.data?.full_name||"Mitarbeiter")} – ${esc(month)}</h3>
@@ -147,8 +147,40 @@ async function toggleEmployeeActive(uid,isActive){if(!confirm(isActive?"Mitarbei
 async function removeAssignment(uid,pid){if(!confirm("Baustellen-Zuweisung wirklich entfernen?"))return;let r=await sb.from("project_members").delete().eq("user_id",uid).eq("project_id",pid);if(r.error)return alert("❌ "+r.error.message);await loadChefData()}
 async function loadChefData(){if(profile?.role!=="chef")return;let [pr,pm,pj]=await Promise.all([sb.from("profiles").select("id,full_name,role,active").order("full_name"),sb.from("project_members").select("project_id,user_id"),sb.from("projects").select("id,name,address").order("name")]);if(pr.error)return $("employees").innerHTML="❌ "+esc(pr.error.message);if(pm.error)return $("employees").innerHTML="❌ "+esc(pm.error.message);if(pj.error)return $("employees").innerHTML="❌ "+esc(pj.error.message);chefEmployees=pr.data||[];chefMemberships=pm.data||[];chefProjects=pj.data||[];renderEmployees();let employees=chefEmployees.filter(u=>u.active);$("assignEmployee").innerHTML=employees.filter(u=>u.role!=="chef").map(u=>`<option value="${u.id}">${esc(u.full_name)}</option>`).join("")||'<option value="">Keine Mitarbeiter</option>';$("chefHourEmployee").innerHTML=employees.map(u=>`<option value="${u.id}">${esc(u.full_name)}</option>`).join("");$("auditEmployee").innerHTML='<option value="">Alle Mitarbeiter</option>'+chefEmployees.map(u=>`<option value="${u.id}">${esc(u.full_name)}${u.active?"":" (inaktiv)"}</option>`).join("");let opts=chefProjects.map(p=>`<option value="${p.id}">${esc(p.name)}${p.address?" – "+esc(p.address):""}</option>`).join("");$("assignProject").innerHTML=opts||'<option value="">Keine Baustellen</option>';$("reportProject").innerHTML=opts||'<option value="">Keine Baustellen</option>'}
 async function loadChefMonth(){$("chefMonthResult").innerHTML="Wird geladen…";$("chefMonthResult").innerHTML=await hoursHtml($("chefHourEmployee").value,$("chefMonth").value,true)}
-async function openEdit(id){let r=await sb.from("work_sessions").select("*").eq("id",id).single();if(r.error)return alert(r.error.message);let x=r.data;$("editSession").innerHTML=`<div class="editbox"><h3>✏️ Schicht bearbeiten</h3><input id="editId" type="hidden" value="${esc(x.id)}"><label>Start</label><input id="editStart" type="datetime-local" value="${localInput(x.started_at)}"><label>Ende (leer = läuft)</label><input id="editEnd" type="datetime-local" value="${localInput(x.ended_at)}"><label>Gesamte abgeschlossene Pause in Minuten</label><input id="editPause" type="number" min="0" value="${Math.floor((x.pause_seconds||0)/60)}"><div class="status ${x.paused_at&&!x.ended_at?"paused":"running"}">${x.ended_at?"✅ Beendet":x.paused_at?"⏸ Aktuell in Pause":"▶️ Aktuell laufend"}</div><button onclick="saveChefEdit()">Änderungen speichern</button>${!x.ended_at?(x.paused_at?'<button class="secondary" onclick="chefResume()">▶️ Pause beenden</button>':'<button class="secondary" onclick="chefPause()">⏸ Pause starten</button>'):""}${!x.ended_at?'<button class="danger" onclick="chefFinish()">⏹ Schicht jetzt beenden</button>':""}</div>`;$("editSession").scrollIntoView({behavior:"smooth",block:"nearest"})}
-async function saveChefEdit(){let id=$("editId").value,start=$("editStart").value,end=$("editEnd").value,pause=Math.max(0,Number($("editPause").value)||0)*60;if(!start)return alert("Startzeit fehlt.");let patch={started_at:new Date(start).toISOString(),ended_at:end?new Date(end).toISOString():null,pause_seconds:pause};if(end)patch.paused_at=null;let r=await sb.from("work_sessions").update(patch).eq("id",id);if(r.error)return alert("❌ "+r.error.message);await loadChefMonth();await loadAudit();alert("✅ Arbeitszeit geändert")}
+async function openEdit(id){
+ let r=await sb.from("work_sessions").select("*").eq("id",id).single();
+ if(r.error)return alert(r.error.message);
+ let x=r.data;
+ let options=chefProjects.map(p=>`<option value="${esc(p.id)}" ${p.id===x.project_id?"selected":""}>${esc(p.name)}</option>`).join("");
+ $("editSession").innerHTML=`<div class="editbox"><h3>✏️ Eintrag bearbeiten</h3>
+ <input id="editId" type="hidden" value="${esc(x.id)}">
+ <label>Baustelle</label><select id="editProject">${options}</select>
+ <label>Status</label><select id="editStatus"><option value="arbeit">Arbeit</option><option value="krank">Krank</option><option value="urlaub">Urlaub</option><option value="feiertag">Feiertag</option></select>
+ <label>Datum und Beginn</label><input id="editStart" type="datetime-local" value="${localInput(x.started_at)}">
+ <label>Ende (bei Arbeit leer = läuft)</label><input id="editEnd" type="datetime-local" value="${localInput(x.ended_at)}">
+ <label>Mittagspause / gesamte Pause in Minuten</label><input id="editPause" type="number" min="0" value="${Math.floor((x.pause_seconds||0)/60)}">
+ <label>Notiz</label><input id="editNote" value="${esc(x.note||"")}" placeholder="Notiz (optional)">
+ <button onclick="saveChefEdit()">Änderungen speichern</button>
+ ${!x.ended_at?(x.paused_at?'<button class="secondary" onclick="chefResume()">▶️ Pause beenden</button>':'<button class="secondary" onclick="chefPause()">⏸ Pause starten</button>'):""}
+ ${!x.ended_at?'<button class="danger" onclick="chefFinish()">⏹ Schicht jetzt beenden</button>':""}</div>`;
+ $("editStatus").value=x.status||"arbeit";
+ $("editSession").scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+async function saveChefEdit(){
+ let id=$("editId").value,start=$("editStart").value,end=$("editEnd").value;
+ let project_id=$("editProject").value,status=$("editStatus").value;
+ let pause=Number($("editPause").value);
+ if(!start||!project_id)return alert("Datum und Baustelle fehlen.");
+ if(!Number.isFinite(pause)||pause<0)return alert("Bitte gültige Pause eingeben.");
+ if(end&&new Date(end)<new Date(start))return alert("Ende darf nicht vor Beginn liegen.");
+ let patch={project_id,status,note:$("editNote").value.trim(),started_at:new Date(start).toISOString(),ended_at:end?new Date(end).toISOString():null,pause_seconds:Math.round(pause*60)};
+ if(status!=="arbeit"){
+   patch.ended_at=patch.started_at;patch.pause_seconds=0;patch.paused_at=null;
+ }else if(end)patch.paused_at=null;
+ let r=await sb.from("work_sessions").update(patch).eq("id",id);
+ if(r.error)return alert("❌ "+r.error.message);
+ await loadChefMonth();await loadAudit();alert("✅ Eintrag gespeichert");
+}
 async function chefPause(){let id=$("editId").value,r=await sb.from("work_sessions").update({paused_at:new Date().toISOString()}).eq("id",id);if(r.error)return alert("❌ "+r.error.message);await loadChefMonth();await loadAudit()}
 async function chefResume(){let id=$("editId").value,r=await sb.from("work_sessions").select("pause_seconds,paused_at").eq("id",id).single();if(r.error)return alert("❌ "+r.error.message);let add=r.data.paused_at?Math.max(0,Math.floor((new Date()-new Date(r.data.paused_at))/1000)):0;let u=await sb.from("work_sessions").update({pause_seconds:(r.data.pause_seconds||0)+add,paused_at:null}).eq("id",id);if(u.error)return alert("❌ "+u.error.message);await loadChefMonth();await loadAudit()}
 async function chefFinish(){let id=$("editId").value,r=await sb.from("work_sessions").select("pause_seconds,paused_at").eq("id",id).single();if(r.error)return alert("❌ "+r.error.message);let add=r.data.paused_at?Math.max(0,Math.floor((new Date()-new Date(r.data.paused_at))/1000)):0;let u=await sb.from("work_sessions").update({ended_at:new Date().toISOString(),pause_seconds:(r.data.pause_seconds||0)+add,paused_at:null}).eq("id",id);if(u.error)return alert("❌ "+u.error.message);await loadChefMonth();await loadAudit()}
